@@ -112,10 +112,22 @@ func notionParse(data []any) []map[string]any {
 			continue
 		}
 		// 必要なプロパティを抽出
-		date, ok := properties["日付"].(map[string]any)
+		dateAll, ok := properties["日付"].(map[string]any)
 		if !ok {
-			slog.Error("日付の形式が不正です", slog.Any("properties", properties))
+			slog.Error("日付情報の形式が不正です", slog.Any("properties", properties))
 			continue
+		}
+		date, ok := dateAll["date"].(map[string]any)
+		if !ok {
+			slog.Error("日付の形式が不正です", slog.Any("dateAll", dateAll))
+			continue
+		}
+		// startが現在時刻より過去ならスキップ
+		if s, okStart := date["start"].(string); okStart && s != "" {
+			t, err := time.Parse(time.RFC3339, s)
+			if err == nil && t.Before(time.Now()) {
+				continue
+			}
 		}
 		name, ok := properties["名前"].(map[string]any)
 		if !ok {
@@ -154,13 +166,11 @@ func parseTimeStamp(date string) string {
 
 func CreateDiscordEmbed(date map[string]any) string {
 	var start, end string
-	if dateMap, ok := date["date"].(map[string]any); ok {
-		if s, ok := dateMap["start"].(string); ok {
-			start = parseTimeStamp(s)
-		}
-		if e, ok := dateMap["end"].(string); ok && e != "" {
-			end = parseTimeStamp(e)
-		}
+	if s, ok := date["start"].(string); ok && s != "" {
+		start = parseTimeStamp(s)
+	}
+	if e, ok := date["end"].(string); ok && e != "" {
+		end = parseTimeStamp(e)
 	}
 	description := fmt.Sprintf("日付: %s -> %s", start, end)
 
