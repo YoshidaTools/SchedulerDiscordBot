@@ -223,11 +223,13 @@ func SendDiscordEmbed(webhookURL, title, start, end string) error {
 		end = start // 終了時間がない場合は開始時間を使用
 	}
 
+	role := "todo"
+
 	payload := map[string]any{
 		"embeds": []map[string]any{
 			{
 				"title":       "スケジュール通知です！",
-				"description": fmt.Sprintf("タイトル: %s\n日付: %s -> %s", title, start, end),
+				"description": fmt.Sprintf("タイトル: %s\n\nロール: %s\n\n日付: %s -> %s", title, role, start, end),
 			},
 		},
 	}
