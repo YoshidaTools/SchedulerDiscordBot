@@ -59,10 +59,23 @@ func main() {
 		}
 		parseData := notionParse(results)
 		for _, page := range parseData {
-			if !isScheduleForTomorrow(page["start"].(map[string]any)) {
+			date, ok := page["date"].(map[string]any)
+			if !ok {
+				slog.Error("日付情報の形式が不正です", slog.Any("page", page))
 				continue
 			}
-			CreateDiscordEmbed(page)
+
+			if !isScheduleForTomorrow(date) {
+				continue
+			}
+
+			start := parseTimeStamp(date["start"].(string))
+			end := parseTimeStamp(date["end"].(string))
+			if start == "" || end == "" {
+				slog.Error("日付のパースに失敗しました", slog.Any("date", date))
+				continue
+			}
+			CreateDiscordEmbed(page["title"].(string), start, end)
 		}
 	}
 
@@ -173,12 +186,12 @@ func notionParse(data []any) []map[string]any {
 
 func parseTimeStamp(date string) string {
 	// 日付をフォーマット
-	t, err := time.Parse(time.RFC3339, date)
+	t, err := time.Parse(time.RFC3339Nano, date)
 	if err != nil {
 		slog.Error("日付のパースに失敗しました", slog.Any("error", err))
 		return ""
 	}
-	return t.Format("2006-01-02 15:04:05")
+	return t.Format(time.DateTime)
 }
 
 func isScheduleForTomorrow(date map[string]any) bool {
@@ -195,16 +208,14 @@ func isScheduleForTomorrow(date map[string]any) bool {
 	return false
 }
 
-func CreateDiscordEmbed(date map[string]any) string {
-	var start, end string
-	if s, ok := date["start"].(string); ok && s != "" {
-		start = parseTimeStamp(s)
-	}
-	if e, ok := date["end"].(string); ok && e != "" {
-		end = parseTimeStamp(e)
-	}
+func CreateDiscordEmbed(title, start, end string) string {
 	description := fmt.Sprintf("日付: %s -> %s", start, end)
 
-	embed := fmt.Sprintf(`"title": "%s", "description": "%s"`, date["title"].(string), description)
+	embed := fmt.Sprintf(`"title": "%s", "description": "%s"`, title, description)
+	slog.Info("Discord Embedを作成しました", slog.String("embed", embed))
+	if embed == "" {
+		slog.Error("Discord Embedの作成に失敗しました", slog.Any("title", title), slog.Any("start", start), slog.Any("end", end))
+		return ""
+	}
 	return embed
 }
