@@ -76,7 +76,7 @@ func main() {
 				continue
 			}
 
-			err := SendDiscordEmbed(params["discord_webhook"].(string), page["title"].(string), start, end)
+			err := SendDiscordEmbed(params["discord_webhook"].(string), page["title"].(string), start, end, "")
 			if err != nil {
 				slog.Error("Discord Webhookの送信に失敗しました", slog.Any("error", err))
 				continue
@@ -146,7 +146,8 @@ func notionParse(data []any) []map[string]any {
 			slog.Error("プロパティの形式が不正です", slog.Any("page", page))
 			continue
 		}
-		// 必要なプロパティを抽出
+
+		// 日付情報を取得 date map[string]any
 		dateAll, ok := properties["日付"].(map[string]any)
 		if !ok {
 			slog.Error("日付情報の形式が不正です", slog.Any("properties", properties))
@@ -164,6 +165,8 @@ func notionParse(data []any) []map[string]any {
 				continue
 			}
 		}
+
+		// 予定のタイトルtextを取得
 		name, ok := properties["名前"].(map[string]any)
 		if !ok {
 			slog.Error("名前の形式が不正です", slog.Any("properties", properties))
@@ -179,10 +182,47 @@ func notionParse(data []any) []map[string]any {
 			slog.Error("textオブジェクトの形式が不正です", slog.Any("titleValue", titleValue[0]))
 			continue
 		}
-		// text{}を抽出
+
+		// 開催場所textを取得
+		location, ok := properties["開催場所"].(map[string]any)
+		if !ok {
+			slog.Error("開催場所の形式が不正です", slog.Any("properties", properties))
+			continue
+		}
+		locationValue, ok := location["rich_text"].([]any)
+		if !ok || len(locationValue) == 0 {
+			slog.Error("開催場所のリッチテキスト配列の形式が不正です", slog.Any("location", location))
+			continue
+		}
+		locationText, ok := locationValue[0].(map[string]any)["plain_text"].(string)
+		if !ok {
+			slog.Error("開催場所のplain_textの形式が不正です", slog.Any("locationValue", locationValue[0]))
+			continue
+		}
+
+		// 対象ロールtextを取得
+		role, ok := properties["ロール"].(map[string]any)
+		if !ok {
+			slog.Error("対象ロールの形式が不正です", slog.Any("properties", properties))
+			continue
+		}
+		roleValue, ok := role["rich_text"].([]any)
+		if !ok || len(roleValue) == 0 {
+			slog.Error("対象ロールのリッチテキスト配列の形式が不正です", slog.Any("role", role))
+			continue
+		}
+		roleText, ok := roleValue[0].(map[string]any)["plain_text"].(string)
+		if !ok {
+			slog.Error("対象ロールのplain_textの形式が不正です", slog.Any("roleValue", roleValue[0]))
+			continue
+		}
+
+		// 抽出したデータをresultsに追加
 		results = append(results, map[string]any{
-			"title": textObj["content"],
-			"date":  date,
+			"title":    textObj["content"],
+			"role":     roleText,
+			"date":     date,
+			"location": locationText,
 		})
 	}
 	slog.Info("Notionカレンダーのデータをパースしました", slog.Any("results", results))
@@ -213,7 +253,7 @@ func isScheduleForTomorrow(date map[string]any) bool {
 	return false
 }
 
-func SendDiscordEmbed(webhookURL, title, start, end string) error {
+func SendDiscordEmbed(webhookURL, title, start, end, location string) error {
 	if webhookURL == "" {
 		slog.Error("DiscordのWebhook URLが設定されていません")
 		return fmt.Errorf("DiscordのWebhook URLが設定されていません")
@@ -228,8 +268,12 @@ func SendDiscordEmbed(webhookURL, title, start, end string) error {
 	payload := map[string]any{
 		"embeds": []map[string]any{
 			{
-				"title":       "スケジュール通知です！",
-				"description": fmt.Sprintf("タイトル: %s\n\nロール: %s\n\n日付: %s -> %s", title, role, start, end),
+				"title": "スケジュール通知です！",
+				"description": fmt.Sprintf(`
+				タイトル: %s
+				ロール: %s
+				日時: %s -> %s
+				開催場所: %s`, title, role, start, end, location),
 			},
 		},
 	}
