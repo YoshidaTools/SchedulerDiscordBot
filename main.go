@@ -75,7 +75,12 @@ func main() {
 				slog.Error("日付のパースに失敗しました", slog.Any("date", date))
 				continue
 			}
-			CreateDiscordEmbed(page["title"].(string), start, end)
+
+			err := SendDiscordEmbed(params["discord_webhook"].(string), page["title"].(string), start, end)
+			if err != nil {
+				slog.Error("Discord Webhookの送信に失敗しました", slog.Any("error", err))
+				continue
+			}
 		}
 	}
 
@@ -208,14 +213,44 @@ func isScheduleForTomorrow(date map[string]any) bool {
 	return false
 }
 
-func CreateDiscordEmbed(title, start, end string) string {
-	description := fmt.Sprintf("日付: %s -> %s", start, end)
-
-	embed := fmt.Sprintf(`"title": "%s", "description": "%s"`, title, description)
-	slog.Info("Discord Embedを作成しました", slog.String("embed", embed))
-	if embed == "" {
-		slog.Error("Discord Embedの作成に失敗しました", slog.Any("title", title), slog.Any("start", start), slog.Any("end", end))
-		return ""
+func SendDiscordEmbed(webhookURL, title, start, end string) error {
+	if webhookURL == "" {
+		slog.Error("DiscordのWebhook URLが設定されていません")
+		return fmt.Errorf("DiscordのWebhook URLが設定されていません")
 	}
-	return embed
+
+	if end == "" {
+		end = start // 終了時間がない場合は開始時間を使用
+	}
+
+	payload := map[string]any{
+		"embeds": []map[string]any{
+			{
+				"title":       "スケジュール通知です！",
+				"description": fmt.Sprintf("タイトル: %s\n日付: %s -> %s", title, start, end),
+			},
+		},
+	}
+
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		slog.Error("Discord EmbedのJSON変換に失敗しました", slog.Any("error", err))
+		return err
+	}
+
+	resp, err := http.Post(webhookURL, "application/json", bytes.NewBuffer(jsonPayload))
+	if err != nil {
+		slog.Error("Discordへのリクエスト送信に失敗しました", slog.Any("error", err))
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		slog.Error("Discordへのリクエストが失敗しました", slog.Int("statusCode", resp.StatusCode), slog.String("body", string(body)))
+		return fmt.Errorf("discordへのリクエストが失敗しました: %s", body)
+	}
+
+	slog.Info("Discord Embedを送信しました")
+	return nil
 }
