@@ -1,23 +1,25 @@
 package utils
 
 import (
+	"encoding/json"
 	"log/slog"
-
-	"github.com/joho/godotenv"
+	"os"
 )
 
-// EnvLoader 環境変数を読み込むインターフェース
-type EnvLoader interface {
-	LoadEnv(filename string)
-}
+func LoadEnv(filename string) map[string]any {
+	var envJson map[string]any
 
-// DotenvLoader .envファイルを読み込む構造体
-type DotenvLoader struct{}
-
-// LoadEnv .envファイルを読み込み、環境変数に設定する
-func (d *DotenvLoader) LoadEnv(filename string) {
-	err := godotenv.Load(filename)
+	bytes, err := os.ReadFile(filename)
 	if err != nil {
-		slog.Error(".envファイルの読み込みに失敗しました", slog.Any("error", err))
+		slog.Error("環境変数ファイルの読み込みに失敗しました", slog.Any("error", err))
+		return nil
 	}
+
+	err = json.Unmarshal(bytes, &envJson)
+	if err != nil {
+		slog.Error("環境変数の読み込みに失敗しました", slog.Any("error", err))
+		return nil
+	}
+	slog.Info("環境変数の読み込みに成功", slog.Any("env", envJson))
+	return envJson
 }
