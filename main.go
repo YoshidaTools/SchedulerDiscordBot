@@ -42,6 +42,9 @@ func main() {
 	}
 	parseData := notionParse(results)
 	for _, page := range parseData {
+		if !isScheduleForTomorrow(page["start"].(map[string]any)) {
+			continue
+		}
 		CreateDiscordEmbed(page)
 	}
 
@@ -162,6 +165,20 @@ func parseTimeStamp(date string) string {
 		return ""
 	}
 	return t.Format("2006-01-02 15:04:05")
+}
+
+func isScheduleForTomorrow(date map[string]any) bool {
+	if s, ok := date["start"].(string); ok && s != "" {
+		t, err := time.Parse(time.RFC3339, s)
+		if err != nil {
+			return false
+		}
+		now := time.Now()
+		tomorrow := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, now.Location())
+		dayAfterTomorrow := tomorrow.AddDate(0, 0, 1)
+		return !t.Before(tomorrow) && t.Before(dayAfterTomorrow)
+	}
+	return false
 }
 
 func CreateDiscordEmbed(date map[string]any) string {
