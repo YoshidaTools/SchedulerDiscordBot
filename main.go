@@ -7,13 +7,19 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/RyuichiroYoshida/SchedulerDiscordBot/utils"
 )
 
 func main() {
+	envData := utils.LoadEnv("env.json")
+
+	for n, item := range envData {
+		c, _ := item.(map[string]any)
+		fmt.Println(n, c["discord_webhook"])
+	}
+
 	// var chooseGuildId string
 	// if len(os.Args) > 1 {
 	// 	chooseGuildId = os.Args[1]
@@ -23,47 +29,55 @@ func main() {
 	// }
 	// slog.Info("選択されたギルドID", slog.String("guildId", chooseGuildId))
 
-	callback := make(chan map[string]any)
-	go func() {
-		data := GetNotionCalendar()
-		callback <- data
-	}()
-	slog.Info("Notionカレンダーのデータを取得中...")
-	data := <-callback
-	if data == nil {
-		slog.Error("Notionカレンダーのデータ取得に失敗しました")
-		return
-	}
-
-	results, ok := data["results"].([]any)
-	if !ok {
-		slog.Error("resultsの型が不正です")
-		return
-	}
-	parseData := notionParse(results)
-	for _, page := range parseData {
-		if !isScheduleForTomorrow(page["start"].(map[string]any)) {
-			continue
+	for projectName, item := range envData {
+		params, ok := item.(map[string]any)
+		if !ok {
+			slog.Error("環境変数の形式が不正です", slog.Any("item", item))
 		}
-		CreateDiscordEmbed(page)
+
+		notionToken := params["notion_api_token"].(string)
+		notionDatabaseId := params["notion_database_id"].(string)
+		slog.Info("プロジェクト情報", slog.String("projectName", projectName), slog.String("notionToken", notionToken), slog.String("notionDatabaseId", notionDatabaseId))
+
+		callback := make(chan map[string]any)
+		go func(token, id string) {
+			data := GetNotionCalendar(token, id)
+			callback <- data
+		}(notionToken, notionDatabaseId)
+
+		slog.Info("Notionカレンダーのデータを取得中...")
+		data := <-callback
+		if data == nil {
+			slog.Error("Notionカレンダーのデータ取得に失敗しました")
+			return
+		}
+
+		results, ok := data["results"].([]any)
+		if !ok {
+			slog.Error("resultsの型が不正です")
+			return
+		}
+		parseData := notionParse(results)
+		for _, page := range parseData {
+			if !isScheduleForTomorrow(page["start"].(map[string]any)) {
+				continue
+			}
+			CreateDiscordEmbed(page)
+		}
 	}
 
 	// slog.Info("Notionカレンダーのデータ取得に成功", slog.Any("data", *data))
 	// chooseGuildIdをここで利用可能
 }
 
-func GetNotionCalendar() map[string]any {
-	loader := utils.DotenvLoader{}
-	loader.LoadEnv(".env")
-	notionToken := os.Getenv("NOTION_API_TOKEN")
-	databaseID := os.Getenv("NOTION_DATABASE_ID")
+func GetNotionCalendar(notionToken, databaseId string) map[string]any {
 
-	if notionToken == "" || databaseID == "" {
+	if notionToken == "" || databaseId == "" {
 		slog.Error("NotionのAPIトークンまたはデータベースIDが設定されていません")
 		return nil
 	}
 
-	url := fmt.Sprintf("https://api.notion.com/v1/databases/%s/query", databaseID)
+	url := fmt.Sprintf("https://api.notion.com/v1/databases/%s/query", databaseId)
 
 	reqBody := map[string]any{}
 	jsonBody, _ := json.Marshal(reqBody)
