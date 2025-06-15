@@ -20,6 +20,6 @@ func LoadEnv(filename string) map[string]any {
 		slog.Error("環境変数の読み込みに失敗しました", slog.Any("error", err))
 		return nil
 	}
-	slog.Info("環境変数の読み込みに成功", slog.Any("env", envJson))
+	// slog.Info("環境変数の読み込みに成功", slog.Any("env", envJson))
 	return envJson
 }
