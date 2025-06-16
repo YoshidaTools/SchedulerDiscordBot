@@ -11,6 +11,6 @@ jobs:
         steps:
           - name: Run Go script
             run: |
-                cd ../Workers/SchedulerBot
+                cd ../../../Workers/SchedulerBot
                 go mod tidy
                 go run main.go
