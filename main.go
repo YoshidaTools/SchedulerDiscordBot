@@ -20,15 +20,6 @@ func main() {
 		fmt.Println(n, c["discord_webhook"])
 	}
 
-	// var chooseGuildId string
-	// if len(os.Args) > 1 {
-	// 	chooseGuildId = os.Args[1]
-	// } else {
-	// 	slog.Error("ギルドIDが指定されていません")
-	// 	return
-	// }
-	// slog.Info("選択されたギルドID", slog.String("guildId", chooseGuildId))
-
 	for projectName, item := range envData {
 		params, ok := item.(map[string]any)
 		if !ok {
@@ -76,7 +67,7 @@ func main() {
 				continue
 			}
 
-			err := SendDiscordEmbed(params["discord_webhook"].(string), page["title"].(string), start, end, "")
+			err := SendDiscordEmbed(params["discord_webhook"].(string), page["title"].(string), start, end, page["location"].(string), page["role"].(string))
 			if err != nil {
 				slog.Error("Discord Webhookの送信に失敗しました", slog.Any("error", err))
 				continue
@@ -253,7 +244,7 @@ func isScheduleForTomorrow(date map[string]any) bool {
 	return false
 }
 
-func SendDiscordEmbed(webhookURL, title, start, end, location string) error {
+func SendDiscordEmbed(webhookURL, title, start, end, location, role string) error {
 	if webhookURL == "" {
 		slog.Error("DiscordのWebhook URLが設定されていません")
 		return fmt.Errorf("DiscordのWebhook URLが設定されていません")
@@ -262,8 +253,6 @@ func SendDiscordEmbed(webhookURL, title, start, end, location string) error {
 	if end == "" {
 		end = start // 終了時間がない場合は開始時間を使用
 	}
-
-	role := "todo"
 
 	payload := map[string]any{
 		"embeds": []map[string]any{
