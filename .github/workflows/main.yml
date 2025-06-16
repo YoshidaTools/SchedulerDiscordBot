@@ -14,5 +14,5 @@ jobs:
 
           - name: Run Go script
             run: |
-                cd ./SchedulerDiscordBot
+                cd ./Workers/SchedulerDiscordBot
                 go run main.go
