@@ -9,8 +9,8 @@ jobs:
         runs-on: [self-hosted, Windows, X64]
 
         steps:
-          - name: Checkout repository
-            uses: actions/checkout@v3
-
           - name: Run Go script
-            run: go run main.go
+            run: |
+                cd ../Workers/SchedulerBot
+                go mod tidy
+                go run main.go
