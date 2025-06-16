@@ -257,12 +257,27 @@ func SendDiscordEmbed(webhookURL, title, start, end, location, role string) erro
 	payload := map[string]any{
 		"embeds": []map[string]any{
 			{
-				"title": "スケジュール通知です！",
-				"description": fmt.Sprintf(`
-				タイトル: %s
-				ロール: %s
-				日時: %s -> %s
-				開催場所: %s`, title, role, start, end, location),
+				"title":       "スケジュール通知です！",
+				"description": "明日のスケジュールをお知らせします。\n",
+				"color":       2859167,
+				"fields": []map[string]any{
+					{
+						"name":  "タイトル",
+						"value": title,
+					},
+					{
+						"name":  "ロール",
+						"value": role,
+					},
+					{
+						"name":  "日時",
+						"value": fmt.Sprintf("開始%s -> 終了%s", start, end),
+					},
+					{
+						"name":  "開催場所",
+						"value": location,
+					},
+				},
 			},
 		},
 	}
