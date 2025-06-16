@@ -255,9 +255,10 @@ func SendDiscordEmbed(webhookURL, title, start, end, location, role string) erro
 	}
 
 	payload := map[string]any{
+		"content": "@everyone",
 		"embeds": []map[string]any{
 			{
-				"title":       "スケジュール通知です！",
+				"title":       "スケジュール通知です!",
 				"description": "明日のスケジュールをお知らせします。\n",
 				"color":       2859167,
 				"fields": []map[string]any{
@@ -279,6 +280,9 @@ func SendDiscordEmbed(webhookURL, title, start, end, location, role string) erro
 					},
 				},
 			},
+		},
+		"allowed_mentions": map[string]any{
+			"parse": []string{"everyone"},
 		},
 	}
 
