@@ -13,7 +13,11 @@ import (
 )
 
 func main() {
-	envData := utils.LoadEnv("env.json")
+	envData, err := utils.LoadEnv("env.json")
+	if err != nil {
+		slog.Error("環境変数の読み込みに失敗しました", slog.Any("error", err))
+		return
+	}
 
 	for n, item := range envData {
 		c, _ := item.(map[string]any)
@@ -29,15 +33,11 @@ func main() {
 		notionToken := params["notion_api_token"].(string)
 		notionDatabaseId := params["notion_database_id"].(string)
 		slog.Info("プロジェクト情報", slog.String("projectName", projectName), slog.String("notionToken", notionToken), slog.String("notionDatabaseId", notionDatabaseId))
-
-		callback := make(chan map[string]any)
-		go func(token, id string) {
-			data := GetNotionCalendar(token, id)
-			callback <- data
-		}(notionToken, notionDatabaseId)
-
-		slog.Info("Notionカレンダーのデータを取得中...")
-		data := <-callback
+		if notionToken == "" || notionDatabaseId == "" {
+			slog.Error("NotionのAPIトークンまたはデータベースIDが設定されていません", slog.String("projectName", projectName))
+			continue
+		}
+		data := GetNotionCalendar(notionToken, notionDatabaseId)
 		if data == nil {
 			slog.Error("Notionカレンダーのデータ取得に失敗しました")
 			return
@@ -76,7 +76,6 @@ func main() {
 	}
 
 	// slog.Info("Notionカレンダーのデータ取得に成功", slog.Any("data", *data))
-	// chooseGuildIdをここで利用可能
 }
 
 func GetNotionCalendar(notionToken, databaseId string) map[string]any {
@@ -251,8 +250,10 @@ func SendDiscordEmbed(webhookURL, title, start, end, location, role string) erro
 	}
 
 	if end == "" {
-		end = start // 終了時間がない場合は開始時間を使用
+		end = "未定"
 	}
+
+	const color = 2859167 // DiscordのEmbedの色
 
 	payload := map[string]any{
 		"content": fmt.Sprintf("@%s", role), // ロールをメンション`,
@@ -260,7 +261,7 @@ func SendDiscordEmbed(webhookURL, title, start, end, location, role string) erro
 			{
 				"title":       "スケジュール通知です!",
 				"description": "明日のスケジュールをお知らせします。\n",
-				"color":       2859167,
+				"color":       color,
 				"fields": []map[string]any{
 					{
 						"name":  "タイトル",
@@ -280,9 +281,6 @@ func SendDiscordEmbed(webhookURL, title, start, end, location, role string) erro
 					},
 				},
 			},
-		},
-		"allowed_mentions": map[string]any{
-			"parse": []string{"everyone"},
 		},
 	}
 
