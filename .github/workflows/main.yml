@@ -12,5 +12,6 @@ jobs:
           - name: Run Go script
             run: |
                 cd ../../../Workers/SchedulerBot
+                git pull https://github.com/YoshidaTools/SchedulerDiscordBot.git
                 go mod tidy
                 go run main.go
