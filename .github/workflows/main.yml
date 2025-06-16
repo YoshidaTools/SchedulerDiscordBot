@@ -1,0 +1,18 @@
+name: Run Go Script
+on:
+    workflow_dispatch: {}
+    schedule:
+        - cron: '0 15 * * *'
+
+jobs:
+    run-go-script:
+        runs-on: [self-hosted, Windows, X64]
+
+        steps:
+          - name: Checkout repository
+            uses: actions/checkout@v3
+
+          - name: Run Go script
+            run: |
+                cd ./SchedulerDiscordBot
+                go run main.go
