@@ -255,7 +255,7 @@ func SendDiscordEmbed(webhookURL, title, start, end, location, role string) erro
 	}
 
 	payload := map[string]any{
-		"content": "@everyone",
+		"content": fmt.Sprintf("@%s", role), // ロールをメンション`,
 		"embeds": []map[string]any{
 			{
 				"title":       "スケジュール通知です!",
@@ -267,7 +267,7 @@ func SendDiscordEmbed(webhookURL, title, start, end, location, role string) erro
 						"value": title,
 					},
 					{
-						"name":  "ロール",
+						"name":  "対象者",
 						"value": role,
 					},
 					{
