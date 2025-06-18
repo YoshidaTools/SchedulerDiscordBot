@@ -84,9 +84,10 @@ func processProject(
 		return fmt.Errorf("データの解析に失敗しました: %w", err)
 	}
 
-	// 翌日の予定かつ通知開始時刻に達したもののみDiscordに送信
+	// 翌日の予定、通知開始時刻、またはリマインド日時に達したもののみDiscordに送信
 	for _, event := range events {
-		if !filter.ShouldNotifyNow(event.Date) {
+		shouldNotify := filter.ShouldNotifyNow(event.Date) || filter.ShouldNotifyByRemindDate(event.RemindDate)
+		if !shouldNotify {
 			continue
 		}
 

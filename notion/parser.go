@@ -77,6 +77,10 @@ func (p *NotionParser) parseEvent(properties map[string]any) (Event, error) {
 	}
 	event.Role = role
 
+	// リマインド日時を取得
+	remindDate := p.parseRemindDate(properties)
+	event.RemindDate = remindDate
+
 	return event, nil
 }
 
@@ -94,30 +98,27 @@ func (p *NotionParser) parseDateInfo(properties map[string]any) (DateInfo, error
 	start, _ := date["start"].(string)
 	end, _ := date["end"].(string)
 
-	// 通知開始時刻を解析
-	notifyStartTime := p.parseNotifyStartTime(properties)
-
 	return DateInfo{
-		Start:           start,
-		End:             end,
-		NotifyStartTime: notifyStartTime,
+		Start: start,
+		End:   end,
 	}, nil
 }
 
-func (p *NotionParser) parseNotifyStartTime(properties map[string]any) string {
-	notifyAll, ok := properties["通知開始"].(map[string]any)
+
+func (p *NotionParser) parseRemindDate(properties map[string]any) RemindDate {
+	remindAll, ok := properties["リマインド日時"].(map[string]any)
 	if !ok {
-		// 通知開始プロパティが存在しない場合は空文字を返す
-		return ""
+		// リマインド日時プロパティが存在しない場合は空のRemindDateを返す
+		return RemindDate{}
 	}
 
-	notifyDate, ok := notifyAll["date"].(map[string]any)
+	remindDate, ok := remindAll["date"].(map[string]any)
 	if !ok {
-		return ""
+		return RemindDate{}
 	}
 
-	notifyStart, _ := notifyDate["start"].(string)
-	return notifyStart
+	notifyStartTime, _ := remindDate["start"].(string)
+	return RemindDate{NotifyStartTime: notifyStartTime}
 }
 
 func (p *NotionParser) parseTitle(properties map[string]any) (string, error) {

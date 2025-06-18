@@ -1,15 +1,19 @@
 package notion
 
 type Event struct {
-	Title    string
-	Role     string
-	Date     DateInfo
-	Location string
+	Title      string
+	Role       string
+	Date       DateInfo
+	Location   string
+	RemindDate RemindDate
 }
 
 type DateInfo struct {
-	Start           string
-	End             string
+	Start string
+	End   string
+}
+
+type RemindDate struct {
 	NotifyStartTime string
 }
 

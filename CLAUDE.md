@@ -94,17 +94,26 @@ go test -bench=. ./...
 - **開催場所** (Location): イベントの開催場所
 - **ロール** (Role): 通知対象のDiscordロール名
 - **通知開始** (Date): 通知を開始する日時（オプション）
+- **リマインド日時** (Date): 指定された日時に通知送信（オプション）
 
 ### データ処理フロー
 1. `notion.Client.GetCalendar()`: Notion APIからデータベース全体を取得
-2. `notion.Parser.Parse()`: APIレスポンスをEvent構造体に変換（通知開始時刻を含む）
+2. `notion.Parser.Parse()`: APIレスポンスをEvent構造体に変換（通知開始時刻・リマインド日時を含む）
 3. `scheduler.Filter.ShouldNotifyNow()`: 翌日の予定かつ通知開始時刻に達したものを抽出
-4. `scheduler.TimeParser.ParseTimeStamp()`: 日時を人間可読形式に変換
+4. `scheduler.Filter.ShouldNotifyByRemindDate()`: リマインド日時に達したものを抽出
+5. `scheduler.TimeParser.ParseTimeStamp()`: 日時を人間可読形式に変換
 
-### 通知開始時刻の動作
-- **通知開始プロパティが設定されている場合**: 指定された日時になったら通知開始
-- **通知開始プロパティが空の場合**: 従来通り翌日の予定として通知
-- **パースエラーの場合**: 安全側に倒して通知を実行
+### 通知タイミングの動作
+#### リマインド日時
+- **設定されている場合**: 指定された日時に通知送信（予定の日程に関係なく）
+- **設定されていない場合**: リマインド通知は送信されない
+
+#### 通知開始時刻
+- **設定されている場合**: 翌日の予定で指定時刻に通知開始
+- **設定されていない場合**: 従来通り翌日の予定として通知
+
+#### エラーハンドリング
+- **パースエラーの場合**: リマインド日時は通知しない（安全側）、通知開始時刻は通知する（安全側）
 
 ## 主要関数
 
@@ -125,6 +134,7 @@ go test -bench=. ./...
 - `scheduler.Filter.IsScheduleForTomorrow(date)`: 翌日の予定かどうかを判定
 - `scheduler.Filter.IsNotificationTime(date)`: 通知開始時刻に達しているかを判定
 - `scheduler.Filter.ShouldNotifyNow(date)`: 翌日の予定かつ通知開始時刻に達している場合にtrueを返す
+- `scheduler.Filter.ShouldNotifyByRemindDate(remindDate)`: リマインド日時に達している場合にtrueを返す
 - `scheduler.NewTimeParser()`: 時刻パーサーのファクトリ関数
 - `scheduler.TimeFormatter.ParseTimeStamp(date)`: タイムスタンプを読みやすい形式に変換
 
