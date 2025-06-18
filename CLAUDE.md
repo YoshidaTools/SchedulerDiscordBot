@@ -93,12 +93,18 @@ go test -bench=. ./...
 - **名前** (Name/Title): イベントのタイトル
 - **開催場所** (Location): イベントの開催場所
 - **ロール** (Role): 通知対象のDiscordロール名
+- **通知開始** (Date): 通知を開始する日時（オプション）
 
 ### データ処理フロー
 1. `notion.Client.GetCalendar()`: Notion APIからデータベース全体を取得
-2. `notion.Parser.Parse()`: APIレスポンスをEvent構造体に変換
-3. `scheduler.Filter.IsScheduleForTomorrow()`: 翌日の予定のみを抽出
+2. `notion.Parser.Parse()`: APIレスポンスをEvent構造体に変換（通知開始時刻を含む）
+3. `scheduler.Filter.ShouldNotifyNow()`: 翌日の予定かつ通知開始時刻に達したものを抽出
 4. `scheduler.TimeParser.ParseTimeStamp()`: 日時を人間可読形式に変換
+
+### 通知開始時刻の動作
+- **通知開始プロパティが設定されている場合**: 指定された日時になったら通知開始
+- **通知開始プロパティが空の場合**: 従来通り翌日の予定として通知
+- **パースエラーの場合**: 安全側に倒して通知を実行
 
 ## 主要関数
 
@@ -117,6 +123,8 @@ go test -bench=. ./...
 ### Schedulerパッケージ
 - `scheduler.NewFilter()`: スケジュールフィルターのファクトリ関数
 - `scheduler.Filter.IsScheduleForTomorrow(date)`: 翌日の予定かどうかを判定
+- `scheduler.Filter.IsNotificationTime(date)`: 通知開始時刻に達しているかを判定
+- `scheduler.Filter.ShouldNotifyNow(date)`: 翌日の予定かつ通知開始時刻に達している場合にtrueを返す
 - `scheduler.NewTimeParser()`: 時刻パーサーのファクトリ関数
 - `scheduler.TimeFormatter.ParseTimeStamp(date)`: タイムスタンプを読みやすい形式に変換
 
