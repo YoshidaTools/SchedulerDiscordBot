@@ -6,6 +6,7 @@ type Filter interface {
 	IsScheduleForTomorrow(date notion.DateInfo) bool
 	ShouldNotifyNow(date notion.DateInfo) bool
 	ShouldNotifyByRemindDate(remindDate notion.RemindDate) bool
+	ShouldNotifyOnTargetDate(notificationDate notion.NotificationDate) bool
 }
 
 type TimeFormatter interface {

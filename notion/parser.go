@@ -81,6 +81,10 @@ func (p *NotionParser) parseEvent(properties map[string]any) (Event, error) {
 	remindDate := p.parseRemindDate(properties)
 	event.RemindDate = remindDate
 
+	// 通知したい日を取得
+	notificationDate := p.parseNotificationDate(properties)
+	event.NotificationDate = notificationDate
+
 	return event, nil
 }
 
@@ -119,6 +123,22 @@ func (p *NotionParser) parseRemindDate(properties map[string]any) RemindDate {
 
 	notifyStartTime, _ := remindDate["start"].(string)
 	return RemindDate{NotifyStartTime: notifyStartTime}
+}
+
+func (p *NotionParser) parseNotificationDate(properties map[string]any) NotificationDate {
+	notificationAll, ok := properties["通知したい日"].(map[string]any)
+	if !ok {
+		// 通知したい日プロパティが存在しない場合は空のNotificationDateを返す
+		return NotificationDate{}
+	}
+
+	notificationDate, ok := notificationAll["date"].(map[string]any)
+	if !ok {
+		return NotificationDate{}
+	}
+
+	targetDate, _ := notificationDate["start"].(string)
+	return NotificationDate{TargetDate: targetDate}
 }
 
 func (p *NotionParser) parseTitle(properties map[string]any) (string, error) {
