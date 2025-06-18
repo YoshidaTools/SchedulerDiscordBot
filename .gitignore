@@ -31,3 +31,5 @@ env.json
 # Editor/IDE
 # .idea/
 # .vscode/
+data.txt
+scheduler-bot
