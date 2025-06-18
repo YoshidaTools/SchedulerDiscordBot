@@ -1,308 +1,133 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
-	"time"
 
+	"github.com/RyuichiroYoshida/SchedulerDiscordBot/discord"
+	"github.com/RyuichiroYoshida/SchedulerDiscordBot/internal/config"
+	"github.com/RyuichiroYoshida/SchedulerDiscordBot/notion"
+	"github.com/RyuichiroYoshida/SchedulerDiscordBot/scheduler"
 	"github.com/RyuichiroYoshida/SchedulerDiscordBot/utils"
 )
 
 func main() {
+	// 環境変数を読み込み
 	envData, err := utils.LoadEnv("env.json")
 	if err != nil {
 		slog.Error("環境変数の読み込みに失敗しました", slog.Any("error", err))
 		return
 	}
 
-	for n, item := range envData {
-		c, _ := item.(map[string]any)
-		fmt.Println(n, c["discord_webhook"])
-	}
-
-	for projectName, item := range envData {
-		params, ok := item.(map[string]any)
-		if !ok {
-			slog.Error("環境変数の形式が不正です", slog.Any("item", item))
-		}
-
-		notionToken := params["notion_api_token"].(string)
-		notionDatabaseId := params["notion_database_id"].(string)
-		slog.Info("プロジェクト情報", slog.String("projectName", projectName), slog.String("notionToken", notionToken), slog.String("notionDatabaseId", notionDatabaseId))
-		if notionToken == "" || notionDatabaseId == "" {
-			slog.Error("NotionのAPIトークンまたはデータベースIDが設定されていません", slog.String("projectName", projectName))
-			continue
-		}
-		data := GetNotionCalendar(notionToken, notionDatabaseId)
-		if data == nil {
-			slog.Error("Notionカレンダーのデータ取得に失敗しました")
-			return
-		}
-
-		results, ok := data["results"].([]any)
-		if !ok {
-			slog.Error("resultsの型が不正です")
-			return
-		}
-		parseData := notionParse(results)
-		for _, page := range parseData {
-			date, ok := page["date"].(map[string]any)
-			if !ok {
-				slog.Error("日付情報の形式が不正です", slog.Any("page", page))
-				continue
-			}
-
-			if !isScheduleForTomorrow(date) {
-				continue
-			}
-
-			start := parseTimeStamp(date["start"].(string))
-			end := parseTimeStamp(date["end"].(string))
-			if start == "" || end == "" {
-				slog.Error("日付のパースに失敗しました", slog.Any("date", date))
-				continue
-			}
-
-			err := SendDiscordEmbed(params["discord_webhook"].(string), page["title"].(string), start, end, page["location"].(string), page["role"].(string))
-			if err != nil {
-				slog.Error("Discord Webhookの送信に失敗しました", slog.Any("error", err))
-				continue
-			}
-		}
-	}
-
-	// slog.Info("Notionカレンダーのデータ取得に成功", slog.Any("data", *data))
-}
-
-func GetNotionCalendar(notionToken, databaseId string) map[string]any {
-
-	if notionToken == "" || databaseId == "" {
-		slog.Error("NotionのAPIトークンまたはデータベースIDが設定されていません")
-		return nil
-	}
-
-	url := fmt.Sprintf("https://api.notion.com/v1/databases/%s/query", databaseId)
-
-	reqBody := map[string]any{}
-	jsonBody, _ := json.Marshal(reqBody)
-
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonBody))
+	// 設定を初期化
+	cfg, err := config.NewConfig(envData)
 	if err != nil {
-		slog.Error("リクエストの作成に失敗しました", slog.Any("error", err))
-		return nil
-	}
-	req.Header.Set("Authorization", "Bearer "+notionToken)
-	req.Header.Set("Notion-Version", "2022-06-28")
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		slog.Error("リクエストの送信に失敗しました", slog.Any("error", err))
-		return nil
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		slog.Error("レスポンスの読み取りに失敗しました", slog.Any("error", err))
-		return nil
+		slog.Error("設定の初期化に失敗しました", slog.Any("error", err))
+		return
 	}
 
-	var responseData map[string]any
-	err = json.Unmarshal(body, &responseData)
-	if err != nil {
-		slog.Error("レスポンスのJSONパースに失敗しました", slog.Any("error", err))
-		return nil
-	}
-	// slog.Info("Notionカレンダーのデータ", slog.Any("data", responseData))
-	return responseData
-}
+	// 各パッケージのインスタンスを作成
+	notionClient := notion.NewClient()
+	notionParser := notion.NewParser()
+	scheduleFilter := scheduler.NewFilter()
+	timeParser := scheduler.NewTimeParser()
+	embedBuilder := discord.NewEmbedBuilder()
+	discordSender := discord.NewWebhookSender(embedBuilder)
 
-func notionParse(data []any) []map[string]any {
-	results := make([]map[string]any, 0)
-	for _, item := range data {
-		page, ok := item.(map[string]any)
-		if !ok {
-			slog.Error("データの形式が不正です", slog.Any("item", item))
-			continue
-		}
-		properties, ok := page["properties"].(map[string]any)
-		if !ok {
-			slog.Error("プロパティの形式が不正です", slog.Any("page", page))
-			continue
-		}
-
-		// 日付情報を取得 date map[string]any
-		dateAll, ok := properties["日付"].(map[string]any)
-		if !ok {
-			slog.Error("日付情報の形式が不正です", slog.Any("properties", properties))
-			continue
-		}
-		date, ok := dateAll["date"].(map[string]any)
-		if !ok {
-			slog.Error("日付の形式が不正です", slog.Any("dateAll", dateAll))
-			continue
-		}
-		// startが現在時刻より過去ならスキップ
-		if s, okStart := date["start"].(string); okStart && s != "" {
-			t, err := time.Parse(time.RFC3339, s)
-			if err == nil && t.Before(time.Now()) {
-				continue
-			}
-		}
-
-		// 予定のタイトルtextを取得
-		name, ok := properties["名前"].(map[string]any)
-		if !ok {
-			slog.Error("名前の形式が不正です", slog.Any("properties", properties))
-			continue
-		}
-		titleValue, ok := name["title"].([]any)
-		if !ok || len(titleValue) == 0 {
-			slog.Error("タイトル配列の形式が不正です", slog.Any("name", name))
-			continue
-		}
-		textObj, ok := titleValue[0].(map[string]any)["text"].(map[string]any)
-		if !ok {
-			slog.Error("textオブジェクトの形式が不正です", slog.Any("titleValue", titleValue[0]))
-			continue
-		}
-
-		// 開催場所textを取得
-		location, ok := properties["開催場所"].(map[string]any)
-		if !ok {
-			slog.Error("開催場所の形式が不正です", slog.Any("properties", properties))
-			continue
-		}
-		locationValue, ok := location["rich_text"].([]any)
-		if !ok || len(locationValue) == 0 {
-			slog.Error("開催場所のリッチテキスト配列の形式が不正です", slog.Any("location", location))
-			continue
-		}
-		locationText, ok := locationValue[0].(map[string]any)["plain_text"].(string)
-		if !ok {
-			slog.Error("開催場所のplain_textの形式が不正です", slog.Any("locationValue", locationValue[0]))
-			continue
-		}
-
-		// 対象ロールtextを取得
-		role, ok := properties["ロール"].(map[string]any)
-		if !ok {
-			slog.Error("対象ロールの形式が不正です", slog.Any("properties", properties))
-			continue
-		}
-		roleValue, ok := role["rich_text"].([]any)
-		if !ok || len(roleValue) == 0 {
-			slog.Error("対象ロールのリッチテキスト配列の形式が不正です", slog.Any("role", role))
-			continue
-		}
-		roleText, ok := roleValue[0].(map[string]any)["plain_text"].(string)
-		if !ok {
-			slog.Error("対象ロールのplain_textの形式が不正です", slog.Any("roleValue", roleValue[0]))
-			continue
-		}
-
-		// 抽出したデータをresultsに追加
-		results = append(results, map[string]any{
-			"title":    textObj["content"],
-			"role":     roleText,
-			"date":     date,
-			"location": locationText,
-		})
-	}
-	slog.Info("Notionカレンダーのデータをパースしました", slog.Any("results", results))
-	return results
-}
-
-func parseTimeStamp(date string) string {
-	// 日付をフォーマット
-	t, err := time.Parse(time.RFC3339Nano, date)
-	if err != nil {
-		slog.Error("日付のパースに失敗しました", slog.Any("error", err))
-		return ""
-	}
-	return t.Format(time.DateTime)
-}
-
-func isScheduleForTomorrow(date map[string]any) bool {
-	if s, ok := date["start"].(string); ok && s != "" {
-		t, err := time.Parse(time.RFC3339, s)
+	// プロジェクトごとに処理を実行
+	for projectName, projectConfig := range cfg.Projects {
+		err := processProject(
+			projectName,
+			projectConfig,
+			notionClient,
+			notionParser,
+			scheduleFilter,
+			timeParser,
+			discordSender,
+		)
 		if err != nil {
-			return false
+			slog.Error("プロジェクトの処理に失敗しました",
+				slog.String("projectName", projectName),
+				slog.Any("error", err))
+			continue
 		}
-		now := time.Now()
-		tomorrow := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, now.Location())
-		dayAfterTomorrow := tomorrow.AddDate(0, 0, 1)
-		return !t.Before(tomorrow) && t.Before(dayAfterTomorrow)
 	}
-	return false
 }
 
-func SendDiscordEmbed(webhookURL, title, start, end, location, role string) error {
-	if webhookURL == "" {
-		slog.Error("DiscordのWebhook URLが設定されていません")
-		return fmt.Errorf("DiscordのWebhook URLが設定されていません")
-	}
+func processProject(
+	projectName string,
+	cfg config.ProjectConfig,
+	notionClient notion.Client,
+	parser notion.Parser,
+	filter scheduler.Filter,
+	timeParser scheduler.TimeFormatter,
+	discordSender discord.Sender,
+) error {
+	slog.Info("プロジェクト処理開始",
+		slog.String("projectName", projectName),
+		slog.String("notionDatabaseId", cfg.NotionDatabaseID))
 
-	if end == "" {
-		end = "未定"
-	}
-
-	const color = 2859167 // DiscordのEmbedの色
-
-	payload := map[string]any{
-		"content": fmt.Sprintf("@%s", role), // ロールをメンション`,
-		"embeds": []map[string]any{
-			{
-				"title":       "スケジュール通知です!",
-				"description": "明日のスケジュールをお知らせします。\n",
-				"color":       color,
-				"fields": []map[string]any{
-					{
-						"name":  "タイトル",
-						"value": title,
-					},
-					{
-						"name":  "対象者",
-						"value": role,
-					},
-					{
-						"name":  "日時",
-						"value": fmt.Sprintf("開始%s -> 終了%s", start, end),
-					},
-					{
-						"name":  "開催場所",
-						"value": location,
-					},
-				},
-			},
-		},
-	}
-
-	jsonPayload, err := json.Marshal(payload)
+	// Notionからデータを取得
+	data, err := notionClient.GetCalendar(cfg.NotionAPIToken, cfg.NotionDatabaseID)
 	if err != nil {
-		slog.Error("Discord EmbedのJSON変換に失敗しました", slog.Any("error", err))
-		return err
+		return fmt.Errorf("Notionカレンダーの取得に失敗しました: %w", err)
 	}
 
-	resp, err := http.Post(webhookURL, "application/json", bytes.NewBuffer(jsonPayload))
+	results, ok := data["results"].([]any)
+	if !ok {
+		return fmt.Errorf("resultsの型が不正です")
+	}
+
+	// データを解析
+	events, err := parser.Parse(results)
 	if err != nil {
-		slog.Error("Discordへのリクエスト送信に失敗しました", slog.Any("error", err))
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusNoContent {
-		body, _ := io.ReadAll(resp.Body)
-		slog.Error("Discordへのリクエストが失敗しました", slog.Int("statusCode", resp.StatusCode), slog.String("body", string(body)))
-		return fmt.Errorf("discordへのリクエストが失敗しました: %s", body)
+		return fmt.Errorf("データの解析に失敗しました: %w", err)
 	}
 
-	slog.Info("Discord Embedを送信しました")
+	// 翌日の予定をフィルタリングしてDiscordに送信
+	for _, event := range events {
+		if !filter.IsScheduleForTomorrow(event.Date) {
+			continue
+		}
+
+		start, err := timeParser.ParseTimeStamp(event.Date.Start)
+		if err != nil {
+			slog.Error("開始日時のパースに失敗しました",
+				slog.Any("error", err),
+				slog.String("date", event.Date.Start))
+			continue
+		}
+
+		end, err := timeParser.ParseTimeStamp(event.Date.End)
+		if err != nil {
+			// 終了日時が空の場合はエラーではない
+			if event.Date.End != "" {
+				slog.Error("終了日時のパースに失敗しました",
+					slog.Any("error", err),
+					slog.String("date", event.Date.End))
+			}
+			end = ""
+		}
+
+		err = discordSender.SendEmbed(
+			cfg.DiscordWebhook,
+			event.Title,
+			start,
+			end,
+			event.Location,
+			event.Role,
+		)
+		if err != nil {
+			slog.Error("Discord送信に失敗しました",
+				slog.Any("error", err),
+				slog.String("title", event.Title))
+			continue
+		}
+
+		slog.Info("スケジュール通知を送信しました",
+			slog.String("projectName", projectName),
+			slog.String("title", event.Title))
+	}
+
 	return nil
 }
