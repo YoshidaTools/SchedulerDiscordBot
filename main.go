@@ -70,7 +70,7 @@ func processProject(
 	// Notionからデータを取得
 	data, err := notionClient.GetCalendar(cfg.NotionAPIToken, cfg.NotionDatabaseID)
 	if err != nil {
-		return fmt.Errorf("Notionカレンダーの取得に失敗しました: %w", err)
+		return fmt.Errorf("notionカレンダーの取得に失敗しました: %w", err)
 	}
 
 	results, ok := data["results"].([]any)
@@ -84,9 +84,9 @@ func processProject(
 		return fmt.Errorf("データの解析に失敗しました: %w", err)
 	}
 
-	// 翌日の予定をフィルタリングしてDiscordに送信
+	// 翌日の予定かつ通知開始時刻に達したもののみDiscordに送信
 	for _, event := range events {
-		if !filter.IsScheduleForTomorrow(event.Date) {
+		if !filter.ShouldNotifyNow(event.Date) {
 			continue
 		}
 

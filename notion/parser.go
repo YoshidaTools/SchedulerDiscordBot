@@ -94,7 +94,30 @@ func (p *NotionParser) parseDateInfo(properties map[string]any) (DateInfo, error
 	start, _ := date["start"].(string)
 	end, _ := date["end"].(string)
 
-	return DateInfo{Start: start, End: end}, nil
+	// 通知開始時刻を解析
+	notifyStartTime := p.parseNotifyStartTime(properties)
+
+	return DateInfo{
+		Start:           start,
+		End:             end,
+		NotifyStartTime: notifyStartTime,
+	}, nil
+}
+
+func (p *NotionParser) parseNotifyStartTime(properties map[string]any) string {
+	notifyAll, ok := properties["通知開始"].(map[string]any)
+	if !ok {
+		// 通知開始プロパティが存在しない場合は空文字を返す
+		return ""
+	}
+
+	notifyDate, ok := notifyAll["date"].(map[string]any)
+	if !ok {
+		return ""
+	}
+
+	notifyStart, _ := notifyDate["start"].(string)
+	return notifyStart
 }
 
 func (p *NotionParser) parseTitle(properties map[string]any) (string, error) {

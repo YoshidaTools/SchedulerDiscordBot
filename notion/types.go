@@ -8,8 +8,9 @@ type Event struct {
 }
 
 type DateInfo struct {
-	Start string
-	End   string
+	Start           string
+	End             string
+	NotifyStartTime string
 }
 
 type NotionResponse struct {
