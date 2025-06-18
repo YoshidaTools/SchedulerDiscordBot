@@ -12,6 +12,7 @@ NotionカレンダーとDiscordを連携させた、スケジュール通知ボ�
 
 ## アーキテクチャ
 
+### システム構成図
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   GitHub        │    │   Notion        │    │   Discord       │
@@ -20,20 +21,38 @@ NotionカレンダーとDiscordを連携させた、スケジュール通知ボ�
 └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 
-### ファイル構成
-
+### コード構成（リファクタリング後）
 ```
 SchedulerDiscordBot/
-├── main.go           # メインアプリケーション
-├── utils/
-│   └── env.go        # 環境設定ローダー
-├── env.json          # プロジェクト設定ファイル
-├── go.mod            # Go モジュール設定
-├── go.sum            # 依存関係チェックサム
-└── .github/
-    └── workflows/
-        └── main.yml  # GitHub Actions設定
+├── main.go                    # エントリーポイント（134行）
+├── notion/                    # Notion API連携パッケージ
+│   ├── client.go             # Notion APIクライアント
+│   ├── parser.go             # データ解析処理
+│   └── types.go              # 型定義・インターフェース
+├── discord/                   # Discord通知パッケージ
+│   ├── webhook.go            # Webhook送信処理
+│   ├── embed.go              # Embed構築処理
+│   └── types.go              # 型定義・インターフェース
+├── scheduler/                 # スケジュール処理パッケージ
+│   ├── filter.go             # 日付フィルタリング
+│   ├── time.go               # 時刻処理
+│   └── types.go              # 型定義・インターフェース
+├── internal/config/          # 設定管理パッケージ
+│   └── config.go             # 設定構造体・バリデーション
+├── utils/                    # ユーティリティパッケージ
+│   └── env.go                # 環境変数ローダー
+├── env.json                  # プロジェクト設定ファイル
+├── go.mod                    # Go モジュール設定
+├── go.sum                    # 依存関係チェックサム
+└── .github/workflows/
+    └── main.yml              # GitHub Actions設定
 ```
+
+### パッケージ設計原則
+- **単一責任原則**: 各パッケージは特定の機能に特化
+- **依存関係注入**: インターフェースによる疎結合設計
+- **エラーハンドリング**: 構造化ログによる詳細なエラー追跡
+- **テスタビリティ**: モックしやすいインターフェース設計
 
 ## セットアップ
 
@@ -116,26 +135,44 @@ go build -o scheduler-bot main.go
 
 ## API仕様
 
-### 主要関数
+### パッケージ別API
 
-#### `GetNotionCalendar(notionToken, databaseId string) map[string]any`
-- Notion APIからデータベース情報を取得
-- POSTリクエストでデータベースクエリを実行
-- エラーハンドリングとログ出力を含む
+#### Notion パッケージ
+- **`NotionClient.GetCalendar(token, databaseID string) (map[string]any, error)`**
+  - Notion APIからデータベース情報を取得
+  - POSTリクエストでデータベースクエリを実行
+  - エラーハンドリングとログ出力を含む
 
-#### `notionParse(data []any) []map[string]any`
-- Notion APIレスポンスを解析
-- 必要なフィールド（タイトル、日付、場所、ロール）を抽出
-- 過去の予定を自動フィルタリング
+- **`NotionParser.Parse(data []any) ([]Event, error)`**
+  - Notion APIレスポンスを解析
+  - 必要なフィールド（タイトル、日付、場所、ロール）を抽出
+  - 過去の予定を自動フィルタリング
 
-#### `isScheduleForTomorrow(date map[string]any) bool`
-- 予定が翌日かどうかを判定
-- タイムゾーンを考慮した日付比較
+#### Discord パッケージ
+- **`WebhookSender.SendEmbed(webhookURL, title, start, end, location, role string) error`**
+  - Discord WebhookでEmbedメッセージを送信
+  - ロールメンション機能付き
+  - エラーハンドリングとステータスコード確認
 
-#### `SendDiscordEmbed(webhookURL, title, start, end, location, role string) error`
-- Discord WebhookでEmbedメッセージを送信
-- ロールメンション機能付き
-- カスタマイズ可能なEmbed色設定
+- **`ScheduleEmbedBuilder.BuildScheduleEmbed(title, start, end, location, role string) WebhookPayload`**
+  - スケジュール通知用Embedを構築
+  - カスタマイズ可能なEmbed色設定
+  - フィールドの動的生成
+
+#### Scheduler パッケージ
+- **`ScheduleFilter.IsScheduleForTomorrow(date DateInfo) bool`**
+  - 予定が翌日かどうかを判定
+  - タイムゾーンを考慮した日付比較
+
+- **`TimeParser.ParseTimeStamp(date string) (string, error)`**
+  - RFC3339形式の日付を人間可読形式に変換
+  - エラーハンドリングとログ出力
+
+#### Config パッケージ
+- **`NewConfig(projectsData map[string]any) (*Config, error)`**
+  - 環境変数からプロジェクト設定を構築
+  - 設定値のバリデーション
+  - 型安全な設定管理
 
 ### Discord Embed形式
 
@@ -208,27 +245,56 @@ slog.Info("プロジェクト情報",
 ### 開発環境
 
 ```bash
-# 開発サーバー起動（ファイル監視なし）
+# アプリケーション実行
 go run main.go
+
+# 全パッケージのテスト実行
+go test ./...
 
 # テストカバレッジ確認
 go test -cover ./...
 
 # ベンチマークテスト
 go test -bench=. ./...
+
+# ビルド
+go build -o scheduler-bot main.go
+
+# 依存関係更新
+go mod tidy
 ```
 
 ### コーディング規約
 
-- Go標準のフォーマット（`gofmt`）
-- 構造化ログ（`slog`）の使用
-- エラーハンドリングの徹底
+- **Go標準フォーマット**: `gofmt`による自動整形
+- **構造化ログ**: `log/slog`パッケージの使用
+- **エラーハンドリング**: 適切なエラーラッピングと詳細ログ
+- **インターフェース設計**: テスタビリティを重視した抽象化
+- **パッケージ分離**: 単一責任原則に基づくモジュール化
+
+### 拡張方法
+
+#### 新しい通知チャンネルの追加
+1. `discord/`パッケージを参考に新しいパッケージを作成
+2. 共通のインターフェースを実装
+3. `main.go`で依存関係注入
+
+#### 新しいデータソースの追加
+1. `notion/`パッケージを参考に新しいパッケージを作成
+2. 共通のデータ形式（`Event`構造体）を返すよう実装
+3. `main.go`で切り替え可能に設計
 
 ## ライセンス
 
 このプロジェクトは個人利用・学習目的で作成されています。
 
 ## 更新履歴
+
+- **v2.0.0**: リファクタリング（モジュール化）
+  - コードを機能別パッケージに分離
+  - インターフェースベースの設計に変更
+  - テスタビリティとメンテナンス性を向上
+  - main.goを309行から134行に削減
 
 - **v1.0.0**: 初期リリース
   - Notion-Discord連携機能
